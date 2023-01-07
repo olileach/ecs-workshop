@@ -34,10 +34,6 @@ Outputs:
     Description: The CIDR block of the VPC.
     Value:
       Fn::FindInMap: [CidrMappings, vpc, CIDR]
-# Parameters: 
-#   myKeyPair: 
-#     Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
-#     Type: "AWS::EC2::KeyPair::KeyName"
 Resources:
   AttachGateway:
     DependsOn: [VPC, InternetGateway]
@@ -183,7 +179,6 @@ Resources:
       DhcpOptionsId: {Ref: DHCPOptions}
       VpcId: {Ref: VPC}
     Type: AWS::EC2::VPCDHCPOptionsAssociation
-  
   WorkstationSG:  
     Type: "AWS::EC2::SecurityGroup"
     Properties:
@@ -205,25 +200,12 @@ Resources:
         FromPort: '80'
         ToPort: '80'
         CidrIp: '0.0.0.0/0'
-
-  ECSInstanceSG:
-    Type: "AWS::EC2::SecurityGroup"
-    Properties:
-      GroupDescription: Enable access to container instances, from the load balancer only
-      VpcId: {Ref: VPC}
-      SecurityGroupIngress:
-      - SourceSecurityGroupId: {Ref: ALBSG} 
-        IpProtocol: tcp
-        FromPort: '0'
-        ToPort: '65535'
-
   WorkstationRole:
     Type: AWS::IAM::Role
     Properties:
       Path: "/"
       ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
-        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -233,7 +215,6 @@ Resources:
             - ec2.amazonaws.com
           Action:
             - sts:AssumeRole
-
   WorkstationProfile: 
          Type: AWS::IAM::InstanceProfile
          Properties: 
@@ -244,7 +225,6 @@ Resources:
     Properties:
       Name : ecsworkshop
       SubnetId: {Ref: PublicSubnet1} 
-      # OwnerArn :  !Sub arn:aws:sts::${AWS::AccountId}:assumed-role/TeamRole/MasterKey
       Description: Use this to work with ECS cats & dogs workshop
       InstanceType: t3.large
       Repositories:

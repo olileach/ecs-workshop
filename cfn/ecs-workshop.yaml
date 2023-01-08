@@ -231,6 +231,21 @@ Resources:
             Path: "/"
             Roles: 
             - Ref: "WorkstationRole"
+  ECSAutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - application-autoscaling.amazonaws.com
+          Action:
+            - sts:AssumeRole
   cloud9Environment:
     Properties:
       Name : ecsworkshop

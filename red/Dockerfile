@@ -10,4 +10,5 @@ RUN apt-get update -y && \
 COPY ./default.conf /etc/nginx/conf.d/default.conf
 RUN mkdir -p /usr/share/nginx/html/red
 COPY ./index.html /usr/share/nginx/html/red/index.html
+COPY ./index.html /usr/share/nginx/html/red
 CMD nginx -g "daemon off;"

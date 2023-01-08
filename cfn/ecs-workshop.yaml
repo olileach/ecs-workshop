@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'DemoGo-ECS200 Prerequisite - Network CloudFormation Template'
+Description: 'ECS-Workshop Prerequisite - Network CloudFormation Template'
 Mappings:
   CidrMappings:
     private-subnet-1: {CIDR: 10.0.3.0/24}
@@ -172,7 +172,7 @@ Resources:
       EnableDnsHostnames: 'true'
       EnableDnsSupport: 'true'
       Tags:
-      - {Key: Name, Value: DemoGoECSVPC}
+      - {Key: Name, Value: ecs-workshop-vpc}
     Type: AWS::EC2::VPC
   VPCDHCPOptionsAssociation:
     Properties:
@@ -190,6 +190,16 @@ Resources:
             FromPort: '22'
             ToPort: '22'
             CidrIp: '0.0.0.0/0'
+  ECSInstanceSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Enable access to container instances, from the load balancer only
+      VpcId: {Ref: VPC}
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: {Ref: ALBSG}
+        IpProtocol: tcp
+        FromPort: '0'
+        ToPort: '65535'
   ALBSG:
     Type: "AWS::EC2::SecurityGroup"
     Properties:

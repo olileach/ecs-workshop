@@ -405,32 +405,7 @@ Resources:
                       responseData = {'Error': traceback.format_exc(e)}
                   finally:
                       cfnresponse.send(event, context, status, responseData, 'CustomResourcePhysicalID')
-            
-          def get_account_id():
-              sts = boto3.client('sts')
-              identity = sts.get_caller_identity()
-              account_id = identity["Account"]
-              return account_id
-          
-          def get_image_ids(account_id, repo_name):
-              ecr = boto3.client('ecr')
-              response = ecr.describe_images(
-                  registryId=account_id,
-                  repositoryName=repo_name
-              )
-              image_details = response['imageDetails']
-              image_id = lambda image_detail: {'imageDigest': image_detail['imageDigest']}
-              image_ids = [image_id(image_detail) for image_detail in image_details]
-              return image_ids
 
-          def delete_images(account_id, repo_name, image_ids):
-              ecr = boto3.client('ecr')
-              response = ecr.batch_delete_image(
-                  registryId=account_id,
-                  repositoryName=repo_name,
-                  imageIds=image_ids
-              )
-              print(response)
 
   Cloud9LambdaExecutionRole:
     Type: AWS::IAM::Role

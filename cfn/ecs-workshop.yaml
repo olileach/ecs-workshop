@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'ECS-Workshop Prerequisite - Network CloudFormation Template'
+Description: 'Immersion Day Workshop Prerequisite - CloudFormation Template'
 Mappings:
   CidrMappings:
     private-subnet-1: {CIDR: 10.0.3.0/24}
@@ -190,7 +190,7 @@ Resources:
             FromPort: '22'
             ToPort: '22'
             CidrIp: '0.0.0.0/0'
-  ECSInstanceSG:
+  ImmersionDayInstanceSG:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
       GroupDescription: Enable access to container instances, from the load balancer only
@@ -210,28 +210,7 @@ Resources:
         FromPort: '80'
         ToPort: '80'
         CidrIp: '0.0.0.0/0'
-  WorkstationRole:
-    Type: AWS::IAM::Role
-    Properties:
-      Path: "/"
-      ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AdministratorAccess"
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - ec2.amazonaws.com
-          Action:
-            - sts:AssumeRole
-  WorkstationProfile: 
-         Type: AWS::IAM::InstanceProfile
-         Properties: 
-            Path: "/"
-            Roles: 
-            - Ref: "WorkstationRole"
-  ECSAutoScalingRole:
+  AutoScalingIamRole:
     Type: AWS::IAM::Role
     Properties:
       Path: "/"
@@ -246,13 +225,338 @@ Resources:
             - application-autoscaling.amazonaws.com
           Action:
             - sts:AssumeRole
-  cloud9Environment:
+  Cloud9Instance:
+    DependsOn: Cloud99BootstrapAssociation
     Properties:
-      Name : ecsworkshop
+      Name : workshop-ide
       SubnetId: {Ref: PublicSubnet1} 
-      Description: Use this to work with ECS cats & dogs workshop
+      Description: Use this to work with the red blue app
       InstanceType: t3.large
       Repositories:
         - RepositoryUrl: https://github.com/olileach/ecs-workshop
           PathComponent: ecsworkshop
+      Tags:
+      - Key: filter
+        Value: cloud9-instance
+      - Key: Cloud9SSMBootstrap
+        Value: Active
     Type: AWS::Cloud9::EnvironmentEC2
+  Cloud9IamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: AWS Cloud9 IAM role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+            - ssm.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AdministratorAccess
+      Path: "/"
+  Cloud9InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: Cloud9IamRole
+  Cloud9OutputBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties: 
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption: 
+        ServerSideEncryptionConfiguration: 
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+######## Cloud9 Bootsrap Lambda ########
+
+  Cloud9BootstrapInstanceLambda:
+    Description: Bootstrap Cloud9 instance
+    Type: Custom::Cloud9BootstrapInstanceLambda
+    DependsOn:
+    - Cloud9BootstrapInstanceLambdaFunction
+    - Cloud9Instance
+    - Cloud9InstanceProfile
+    - Cloud9LambdaExecutionRole
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: immersion-day-workshop
+      ServiceToken:
+        Fn::GetAtt:
+        - Cloud9BootstrapInstanceLambdaFunction
+        - Arn
+      REGION:
+        Ref: AWS::Region
+      StackName:
+        Ref: AWS::StackName
+      EnvironmentId:
+        Ref: Cloud9Instance
+      Cloud9Instance:
+        Ref: Cloud9Instance
+      Cloud9InstanceProfileName:
+        Ref: Cloud9InstanceProfile
+      Cloud9InstanceProfileArn:
+        Fn::GetAtt:
+        - Cloud9InstanceProfile
+        - Arn
+      S3BucketName:
+        Ref: Cloud9OutputBucket
+      Cloud9SSMDocument:
+        Ref: Cloud9SSMDocument
+
+  Cloud9BootstrapInstanceLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: ECS Workshop Immersion Day
+      Handler: index.lambda_handler
+      Role:
+        Fn::GetAtt:
+        - Cloud9LambdaExecutionRole
+        - Arn
+      Runtime: python3.9
+      MemorySize: 256
+      Timeout: '600'
+      Code:
+        ZipFile: |
+          from __future__ import print_function
+          import boto3
+          import json
+          import os
+          import time
+          import traceback
+          import cfnresponse
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          
+          def lambda_handler(event, context):
+              logger.info('event: {}'.format(event))
+              logger.info('context: {}'.format(context))
+              responseData = {}
+
+              status = cfnresponse.SUCCESS
+              
+              if event['RequestType'] == 'Delete':
+                  
+                  responseData = {'Success': 'Custom Resource removed'}
+                  cfnresponse.send(event, context, status, responseData, 'CustomResourcePhysicalID')              
+          
+              if event['RequestType'] == 'Create':
+                  try:
+                      # Open AWS clients
+                      logger.info('Creating EC2 client')
+                      ec2 = boto3.client('ec2')
+                      logger.info('EC2 client created: {}'.format(ec2))
+                      
+                      # Get the InstanceId of the Cloud9 IDE
+                      logger.info('Getting InstanceId for Cloud9 IDE')
+                      response = ec2.describe_instances(
+                        Filters=[
+                                  {
+                                    'Name': 'tag:filter',
+                                    'Values': ['cloud9-instance']
+                                  },
+                                  { 
+                                    'Name': 'instance-state-name',
+                                    'Values': ['running']
+                                  }
+                                ] 
+                      )
+
+                      InstanceId =response['Reservations'][0]['Instances'][0]['InstanceId']
+                      logger.info('Instance ID: {}'.format(InstanceId))
+                      InstanceIdList = []
+                      InstanceIdList.append(InstanceId)
+
+                      # Create the IamInstanceProfile request object
+                      iam_instance_profile = {
+                          'Arn': event['ResourceProperties']['Cloud9InstanceProfileArn'],
+                          'Name': event['ResourceProperties']['Cloud9InstanceProfileName']
+                      }
+                      logger.info('IAM Instance Profile Dict: {}'.format(iam_instance_profile))
+          
+                      # Wait for Instance to become ready before adding Role
+                      instance_runner_waiter = ec2.get_waiter('instance_running')
+                      instance_runner_waiter.wait(InstanceIds=InstanceIdList)
+
+                      # attach instance profile
+                      response = ec2.associate_iam_instance_profile(IamInstanceProfile=iam_instance_profile, InstanceId=InstanceId)
+                      
+                      responseData = {'Success': 'Started bootstrapping for instance:' +  InstanceId}
+                      cfnresponse.send(event, context, status, responseData, 'CustomResourcePhysicalID')
+                      
+                  except Exception as e:
+                      status = cfnresponse.FAILED
+                      print(traceback.format_exc())
+                      responseData = {'Error': traceback.format_exc(e)}
+                  finally:
+                      cfnresponse.send(event, context, status, responseData, 'CustomResourcePhysicalID')
+            
+          def get_account_id():
+              sts = boto3.client('sts')
+              identity = sts.get_caller_identity()
+              account_id = identity["Account"]
+              return account_id
+          
+          def get_image_ids(account_id, repo_name):
+              ecr = boto3.client('ecr')
+              response = ecr.describe_images(
+                  registryId=account_id,
+                  repositoryName=repo_name
+              )
+              image_details = response['imageDetails']
+              image_id = lambda image_detail: {'imageDigest': image_detail['imageDigest']}
+              image_ids = [image_id(image_detail) for image_detail in image_details]
+              return image_ids
+
+          def delete_images(account_id, repo_name, image_ids):
+              ecr = boto3.client('ecr')
+              response = ecr.batch_delete_image(
+                  registryId=account_id,
+                  repositoryName=repo_name,
+                  imageIds=image_ids
+              )
+              print(response)
+
+  Cloud9LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName:
+          Fn::Join:
+          - ''
+          - - Cloud9LambdaPolicy-
+            - Ref: AWS::Region
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+            - cloudformation:DescribeStacks
+            - cloudformation:DescribeStackEvents
+            - cloudformation:DescribeStackResource
+            - cloudformation:DescribeStackResources
+            - ec2:DescribeInstances
+            - ec2:AssociateIamInstanceProfile
+            - ec2:ModifyInstanceAttribute
+            - ec2:ReplaceIamInstanceProfileAssociation
+            - ecr:*
+            - s3:*
+            - ssm:*
+            - iam:ListInstanceProfiles
+            - iam:PassRole
+            Resource: "*"
+
+######## Cloud9 SSM Document ########
+
+  Cloud9SSMDocument: 
+    Type: AWS::SSM::Document
+    DependsOn: Cloud9BootstrapInstanceLambdaFunction
+    Properties: 
+      Tags:
+        - Key: Environment
+          Value: AWS Example
+      DocumentType: Command
+      DocumentFormat: YAML
+      Content: 
+        schemaVersion: '2.2'
+        description: Bootstrap Cloud9 Instance
+        mainSteps:
+        - action: aws:runShellScript
+          name: Cloud9bootstrap
+          inputs:
+            runCommand:
+            - "#!/bin/bash"
+            - echo 'Configuring Cloud9 instance for immersion day'
+            - rm -vf ${HOME}/.aws/credentials
+            - sudo yum install -y jq
+            - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            - unzip awscliv2.zip
+            - sudo ./aws/install
+            - !Sub echo "AWS_REGION=${AWS::Region}" >> /etc/bashrc
+            - !Sub echo "AWS_REGION=${AWS::Region}" >> /home/ec2-user/.bashrc
+            - !Sub echo "AWS_ACCOUNT_ID=${AWS::AccountId}" >> /etc/bashrc
+            - !Sub echo "AWS_ACCOUNT_ID=${AWS::AccountId}" >> /home/ec2-user/.bashrc
+            - echo "source /etc/bashrc" >> /home/ec2-user/.bashrc
+            - !Sub aws configure set default.region ${AWS::Region}
+            - git clone https://github.com/olileach/ecs-workshop
+            - cd ecs-workshop
+            - docker build -t main main/.
+            - docker build -t red red/.
+            - docker build -t blue blue/.
+            - !Sub |
+              echo "aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com >> /dev/null 2>&1" \
+              >> /home/ec2-user/.bashrc
+            - !Sub aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+            - !Sub docker tag main:latest ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/main:latest
+            - !Sub docker push ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/main:latest
+            - !Sub docker tag blue:latest ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/blue:latest
+            - !Sub docker push ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/blue:latest
+            - !Sub docker tag red:latest ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/red:latest
+            - !Sub docker push ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/red:latest
+
+#####  Bootstrap options ######
+
+  Cloud99BootstrapAssociation: 
+    Type: AWS::SSM::Association
+    DependsOn: [ Cloud9OutputBucket]
+    Properties: 
+      Name: !Ref  Cloud9SSMDocument
+      OutputLocation: 
+        S3Location:
+          OutputS3BucketName: !Ref Cloud9OutputBucket
+          OutputS3KeyPrefix: bootstrapoutput
+      Targets:
+        - Key: tag:Cloud9SSMBootstrap
+          Values:
+          - Active
+
+##### ECR repos #####
+
+  MainECRrepo:
+    Type: AWS::ECR::Repository
+    Properties: 
+      RepositoryName: 
+        main
+
+  BlueECRrepo:
+    Type: AWS::ECR::Repository
+    Properties: 
+      RepositoryName: 
+        blue
+
+  RedECRrepo:
+    Type: AWS::ECR::Repository
+    Properties: 
+      RepositoryName: 
+        red 

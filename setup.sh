@@ -43,4 +43,8 @@ docker tag blue:latest ${account_id}.dkr.ecr.${region}.amazonaws.com/blue:latest
 docker push ${account_id}.dkr.ecr.${region}.amazonaws.com/blue:latest
 docker tag red:latest ${account_id}.dkr.ecr.${region}.amazonaws.com/red:latest
 docker push ${account_id}.dkr.ecr.${region}.amazonaws.com/red:latest
-echo -e "\nSetup complete. Please follow the ecs workshop instructions to complete the workshop.\n"
+clear
+echo -e "\nSetup complete."
+echo -e "\nPlease follow the ecs workshop instructions to complete the workshop."
+echo -e "\nHere is a list of ECR repoisitories created during setup. We will use these later.\n"
+aws ecr describe-repositories --query "repositories[*].repositoryUri" --output table

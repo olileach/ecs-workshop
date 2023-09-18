@@ -37,7 +37,6 @@ cd ecsworkshop
 docker build -t main main/.
 docker build -t red red/.
 docker build -t blue blue/.
-echo "aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${account_id}.dkr.ecr.${region}.amazonaws.com
 aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${account_id}.dkr.ecr.${region}.amazonaws.com
 docker tag main:latest ${account_id}.dkr.ecr.${region}.amazonaws.com/main:latest
 docker push ${account_id}.dkr.ecr.${region}.amazonaws.com/main:latest

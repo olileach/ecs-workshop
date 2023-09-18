@@ -225,7 +225,6 @@ Resources:
           Action:
             - sts:AssumeRole
   Cloud9Instance:
-    DependsOn: Cloud9BootstrapAssociation
     Properties:
       Name : workshop-ide
       SubnetId: {Ref: PublicSubnet1} 

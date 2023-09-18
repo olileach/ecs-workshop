@@ -14,7 +14,7 @@ The following services are used as part of this workshop:
  - Amazon CloudWatch
  - AWS Auto Scaling
 
- 
+ ---
  
 ![High-Level Architecture](images/ecs-workshop-arch.jpg)
 

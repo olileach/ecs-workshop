@@ -14,6 +14,8 @@ The following services are used as part of this workshop:
  - Amazon CloudWatch
  - AWS Auto Scaling
 
+
+
 ![High-Level Architecture](images/ecs-workshop-arch.jpg)
 
 
@@ -21,13 +23,15 @@ The following services are used as part of this workshop:
 
 [Follow the instructions to set the environment up when attending the ECS Fargate AWS workshop](https://github.com/olileach/ecs-workshop/raw/main/ecs-fargate-immersion-day-workshop.pdf). 
 
-Once the setup has been completed, log into the Cloud9 environment set up by AWS CloudFormation and run the following command in a terminal window:
+Logging in to your AWS console and running AWS CloudFormation should take 15 minutes or so. Once the AWS CloudFormation setup has been completed, log into the Cloud9 environment set up by AWS CloudFormation and run the following command in a terminal window:
 
 ```
 sh ecs-workshop/setup.sh
 ```
 
-Once the setup is complete, [Follow the instructions found here](https://github.com/olileach/ecs-workshop/raw/main/ecs-fargate-immersion-day-workshop.pdf)
+The setup.sh file will configure the aws cli and build and deploy 3 docker containers, which are used as part of the workshop. Setup should take 3-5 minutes. Overall, you should have deployed your ECS Fargate in around 20 minutes and will begin deploying the Blue Red app. 
+
+Good luck with the ECS Fargate workshop.
 
  ### Author
 

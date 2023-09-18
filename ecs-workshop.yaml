@@ -300,6 +300,7 @@ Resources:
   Cloud9BootstrapInstanceLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: ecs-workshop-cfn-lambda
       Tags:
         - Key: Environment
           Value: ECS Workshop Immersion Day
@@ -335,25 +336,30 @@ Resources:
               
               if event['RequestType'] == 'Delete':  
                   try:
-                      ecr_repo_list = ['blue','red','main']
                       ecr = boto3.client('ecr')
-                      logger.info('Deleting ECR iamges.')
-                      for ecr_repo in ecr_repo_list:
-                          get_images = ecr.list_images(repositoryName=ecr_repo)
-                          image_list = [image for image in get_images['imageIds']]
-                          if len(image_list)>=1:
-                              delete_images = ecr.batch_delete_image(repositoryName=ecr_repo, imageIds=image_list)
-                              logger.info('ECR iamges deleted.')
-                          logger.info('Deleting ECR repo.')
                       repos=ecr.describe_repositories()
-                      for repo in repos['repositories']:
-                          if repo['repositoryName']==ecr_repo:
-                              ecr.delete_repository(repositoryName=ecr_repo)
-                              logger.info('ECR repo deleted.')  
+                      workshop_repo_list = ['blue','red','main']
+                      for workshop_repo in workshop_repo_list:
+                          if any(repo['repositoryName'] == workshop_repo for repo in repos['repositories']):
+                              get_images = ecr.list_images(repositoryName=workshop_repo)
+                              image_list = [image for image in get_images['imageIds']]
+                              if len(image_list)>=1:
+                                  delete_images = ecr.batch_delete_image(repositoryName=workshop_repo, imageIds=image_list)
+                                  logger.info('ECR iamges deleted.')
+                                  time.sleep(10)
+                      for workshop_repo in workshop_repo_list:
+                          for repo in repos['repositories']:
+                              if repo['repositoryName']==workshop_repo:
+                                  ecr.delete_repository(repositoryName=workshop_repo)
+                                  logger.info(f'{workshop_repo} ECR repo deleted.')
+                          logger.info('ECR cleanup completed.')
                   except Exception as e:
                       print(traceback.format_exc())
-                      responseData = {'Error': traceback.format_exc(e)}     
-          
+                      responseData = {'Error': traceback.format_exc(e)}
+
+              responseData = {'Success': 'Custom Resource removed'}
+              cfnresponse.send(event, context, status, responseData, 'CustomResourcePhysicalID')    
+
               if event['RequestType'] == 'Create':
                   try:
                       # Open AWS clients

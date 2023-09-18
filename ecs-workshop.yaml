@@ -252,7 +252,6 @@ Resources:
           Principal:
             Service:
             - ec2.amazonaws.com
-            - ssm.amazonaws.com
           Action:
           - sts:AssumeRole
       ManagedPolicyArns:
@@ -264,16 +263,6 @@ Resources:
       Path: "/"
       Roles:
       - Ref: Cloud9IamRole
-  Cloud9OutputBucket:
-    Type: AWS::S3::Bucket
-    DeletionPolicy: Delete
-    Properties: 
-      VersioningConfiguration:
-        Status: Enabled
-      BucketEncryption: 
-        ServerSideEncryptionConfiguration: 
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
 
 ######## Cloud9 Bootsrap Lambda ########
 
@@ -306,10 +295,7 @@ Resources:
       Cloud9InstanceProfileArn:
         Fn::GetAtt:
         - Cloud9InstanceProfile
-        - Arn
-      S3BucketName: 
-        Ref: Cloud9OutputBucket
-      
+        - Arn      
 
   Cloud9BootstrapInstanceLambdaFunction:
     Type: AWS::Lambda::Function
@@ -347,20 +333,7 @@ Resources:
 
               status = cfnresponse.SUCCESS
               
-              if event['RequestType'] == 'Delete':
-                  try:
-                      s3 = boto3.resource('s3')
-                      s3_list = []
-                      s3_list.append(event['ResourceProperties']['Cloud9OutputBucket'])
-                      for s3_bucket in s3_list:
-                          logger.info(f'S3 bucket {s3_bucket}')
-                          logger.info('Deleting S3 bucket contents.')
-                          bucket = s3.Bucket(s3_bucket)
-                          delete_objects(bucket)
-                          logger.info(f'Deleted all S3 bucket contents for {s3_bucket}.')
-                  except Exception as e:
-                      print(traceback.format_exc())
-                      responseData = {'Error': traceback.format_exc(e)}        
+              if event['RequestType'] == 'Delete':  
                   try:
                       ecr_repo_list = ['blue','red','main']
                       ecr = boto3.client('ecr')
@@ -431,15 +404,6 @@ Resources:
                       responseData = {'Error': traceback.format_exc(e)}
                   finally:
                       cfnresponse.send(event, context, status, responseData, 'CustomResourcePhysicalID')
-          
-          def delete_objects(bucket):
-
-              keys = []
-              for version in bucket.object_versions.all():
-                  if version.object_key not in keys:
-                      keys.append(version.object_key)
-              for key in keys:
-                  bucket.object_versions.filter(Prefix=key).delete()
 
 
   Cloud9LambdaExecutionRole:
@@ -480,9 +444,7 @@ Resources:
             - ec2:AssociateIamInstanceProfile
             - ec2:ModifyInstanceAttribute
             - ec2:ReplaceIamInstanceProfileAssociation
-            - s3:GetObject
-            - s3:DeleteObject
-            - s3:ListObjects
             - iam:ListInstanceProfiles
             - iam:PassRole
+            - ecr:*
             Resource: "*"

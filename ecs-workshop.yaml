@@ -1,0 +1,489 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Immersion Day Workshop Prerequisite - CloudFormation Template'
+Mappings:
+  CidrMappings:
+    private-subnet-1: {CIDR: 10.0.3.0/24}
+    private-subnet-2: {CIDR: 10.0.4.0/24}
+    public-subnet-1: {CIDR: 10.0.1.0/24}
+    public-subnet-2: {CIDR: 10.0.2.0/24}
+    vpc: {CIDR: 10.0.0.0/16}
+  DomainNameMappings:
+    us-east-1: {Domain: ec2.internal}
+    us-east-2: {Domain: us-east-2.compute.internal}
+    us-west-1: {Domain: us-west-2.compute.internal}
+    us-west-2: {Domain: us-west-2.compute.internal}
+    eu-west-1: {Domain: eu-west-1.compute.internal}
+Outputs:
+  PrivateSubnet1:
+    Description: The first private subnet.
+    Value: {Ref: PrivateSubnet1}
+  PrivateSubnet2:
+    Description: The second private subnet.
+    Value: {Ref: PrivateSubnet2}
+  PublicSubnet1:
+    Description: The first public subnet.
+    Value: {Ref: PublicSubnet1}
+  PublicSubnet2:
+    Description: The second public subnet.
+    Value: {Ref: PublicSubnet2}
+  VPC:
+    Description: The VPC Id.
+    Value: {Ref: VPC}
+  VpcCidr:
+    Description: The CIDR block of the VPC.
+    Value:
+      Fn::FindInMap: [CidrMappings, vpc, CIDR]
+Resources:
+  AttachGateway:
+    DependsOn: [VPC, InternetGateway]
+    Properties:
+      InternetGatewayId: {Ref: InternetGateway}
+      VpcId: {Ref: VPC}
+    Type: AWS::EC2::VPCGatewayAttachment
+  DHCPOptions:
+    Properties:
+      DomainName:
+        Fn::FindInMap:
+        - DomainNameMappings
+        - {Ref: 'AWS::Region'}
+        - Domain
+      DomainNameServers: [AmazonProvidedDNS]
+    Type: AWS::EC2::DHCPOptions
+  EIP:
+    Properties: {Domain: vpc}
+    Type: AWS::EC2::EIP
+  InternetGateway: {DependsOn: VPC, Type: 'AWS::EC2::InternetGateway'}
+  NAT:
+    DependsOn: AttachGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt: [EIP, AllocationId]
+      SubnetId: {Ref: PublicSubnet1}
+    Type: AWS::EC2::NatGateway
+  PrivateRoute:
+    DependsOn: [PrivateRouteTable, NAT]
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: {Ref: NAT}
+      RouteTableId: {Ref: PrivateRouteTable}
+    Type: AWS::EC2::Route
+  PrivateRouteTable:
+    DependsOn: [VPC, AttachGateway]
+    Properties:
+      Tags:
+      - {Key: Name, Value: PrivateRouteTable}
+      VpcId: {Ref: VPC}
+    Type: AWS::EC2::RouteTable
+  PrivateSubnet1:
+    DependsOn: AttachGateway
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - {'Fn::GetAZs': ''}
+      CidrBlock:
+        Fn::FindInMap: [CidrMappings, private-subnet-1, CIDR]
+      Tags:
+      - {Key: Name, Value: PrivateSubnet1}
+      VpcId: {Ref: VPC}
+    Type: AWS::EC2::Subnet
+  PrivateSubnet1RouteTableAssociation:
+    DependsOn: [PrivateRouteTable, PrivateSubnet1]
+    Properties:
+      RouteTableId: {Ref: PrivateRouteTable}
+      SubnetId: {Ref: PrivateSubnet1}
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  PrivateSubnet2:
+    DependsOn: AttachGateway
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - {'Fn::GetAZs': ''}
+      CidrBlock:
+        Fn::FindInMap: [CidrMappings, private-subnet-2, CIDR]
+      Tags:
+      - {Key: Name, Value: PrivateSubnet2}
+      VpcId: {Ref: VPC}
+    Type: AWS::EC2::Subnet
+  PrivateSubnet2RouteTableAssociation:
+    DependsOn: [PrivateRouteTable, PrivateSubnet2]
+    Properties:
+      RouteTableId: {Ref: PrivateRouteTable}
+      SubnetId: {Ref: PrivateSubnet2}
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  PublicRoute:
+    DependsOn: [PublicRouteTable, AttachGateway]
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: {Ref: InternetGateway}
+      RouteTableId: {Ref: PublicRouteTable}
+    Type: AWS::EC2::Route
+  PublicRouteTable:
+    DependsOn: [VPC, AttachGateway]
+    Properties:
+      Tags:
+      - {Key: Name, Value: PublicRouteTable}
+      VpcId: {Ref: VPC}
+    Type: AWS::EC2::RouteTable
+  PublicSubnet1:
+    DependsOn: AttachGateway
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - {'Fn::GetAZs': ''}
+      CidrBlock:
+        Fn::FindInMap: [CidrMappings, public-subnet-1, CIDR]
+      Tags:
+      - {Key: Name, Value: PublicSubnet1}
+      VpcId: {Ref: VPC}
+    Type: AWS::EC2::Subnet
+  PublicSubnet1RouteTableAssociation:
+    DependsOn: [PublicRouteTable, PublicSubnet1, AttachGateway]
+    Properties:
+      RouteTableId: {Ref: PublicRouteTable}
+      SubnetId: {Ref: PublicSubnet1}
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  PublicSubnet2:
+    DependsOn: AttachGateway
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - {'Fn::GetAZs': ''}
+      CidrBlock:
+        Fn::FindInMap: [CidrMappings, public-subnet-2, CIDR]
+      Tags:
+      - {Key: Name, Value: PublicSubnet2}
+      VpcId: {Ref: VPC}
+    Type: AWS::EC2::Subnet
+  PublicSubnet2RouteTableAssociation:
+    DependsOn: [PublicRouteTable, PublicSubnet2, AttachGateway]
+    Properties:
+      RouteTableId: {Ref: PublicRouteTable}
+      SubnetId: {Ref: PublicSubnet2}
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  VPC:
+    Properties:
+      CidrBlock:
+        Fn::FindInMap: [CidrMappings, vpc, CIDR]
+      EnableDnsHostnames: 'true'
+      EnableDnsSupport: 'true'
+      Tags:
+      - {Key: Name, Value: ecs-workshop-vpc}
+    Type: AWS::EC2::VPC
+  VPCDHCPOptionsAssociation:
+    Properties:
+      DhcpOptionsId: {Ref: DHCPOptions}
+      VpcId: {Ref: VPC}
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+  WorkstationSG:  
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+        GroupName: Workstation to Push images
+        GroupDescription: EC2 SecurityGroup
+        VpcId: {Ref: VPC}
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: '22'
+            ToPort: '22'
+            CidrIp: '0.0.0.0/0'
+  ECSInstanceSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Enable access to container instances, from the load balancer only
+      VpcId: {Ref: VPC}
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: {Ref: ALBSG}
+        IpProtocol: tcp
+        FromPort: '0'
+        ToPort: '65535'
+  ALBSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Enable HTTP to the load balancer
+      VpcId: {Ref: VPC}
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: '0.0.0.0/0'
+  AutoScalingIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - application-autoscaling.amazonaws.com
+          Action:
+            - sts:AssumeRole
+  Cloud9Instance:
+    DependsOn: Cloud9BootstrapAssociation
+    Properties:
+      Name : workshop-ide
+      SubnetId: {Ref: PublicSubnet1} 
+      Description: Use this to work with the red blue app
+      InstanceType: t3.large
+      Repositories:
+        - RepositoryUrl: https://github.com/olileach/ecs-workshop
+          PathComponent: ecsworkshop
+      Tags:
+      - Key: filter
+        Value: cloud9-instance
+      - Key: Cloud9SSMBootstrap
+        Value: Active
+    Type: AWS::Cloud9::EnvironmentEC2
+  Cloud9IamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: AWS Cloud9 IAM role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+            - ssm.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AdministratorAccess
+      Path: "/"
+  Cloud9InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: Cloud9IamRole
+  Cloud9OutputBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties: 
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption: 
+        ServerSideEncryptionConfiguration: 
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+######## Cloud9 Bootsrap Lambda ########
+
+  Cloud9BootstrapInstanceLambda:
+    Description: Bootstrap Cloud9 instance
+    Type: Custom::Cloud9BootstrapInstanceLambda
+    DependsOn:
+    - Cloud9BootstrapInstanceLambdaFunction
+    - Cloud9Instance
+    - Cloud9InstanceProfile
+    - Cloud9LambdaExecutionRole
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: immersion-day-workshop
+      ServiceToken:
+        Fn::GetAtt:
+        - Cloud9BootstrapInstanceLambdaFunction
+        - Arn
+      REGION:
+        Ref: AWS::Region
+      StackName:
+        Ref: AWS::StackName
+      EnvironmentId:
+        Ref: Cloud9Instance
+      Cloud9Instance:
+        Ref: Cloud9Instance
+      Cloud9InstanceProfileName:
+        Ref: Cloud9InstanceProfile
+      Cloud9InstanceProfileArn:
+        Fn::GetAtt:
+        - Cloud9InstanceProfile
+        - Arn
+      S3BucketName: 
+        Ref: Cloud9OutputBucket
+      
+
+  Cloud9BootstrapInstanceLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: ECS Workshop Immersion Day
+      Handler: index.lambda_handler
+      Role:
+        Fn::GetAtt:
+        - Cloud9LambdaExecutionRole
+        - Arn
+      Runtime: python3.9
+      MemorySize: 256
+      Timeout: '600'
+      Code:
+        ZipFile: |
+          from __future__ import print_function
+          import boto3
+          import json
+          import os
+          import time
+          import traceback
+          import cfnresponse
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          
+          def lambda_handler(event, context):
+              logger.info('event: {}'.format(event))
+              logger.info('context: {}'.format(context))
+              responseData = {}
+
+              status = cfnresponse.SUCCESS
+              
+              if event['RequestType'] == 'Delete':
+                  try:
+                      s3 = boto3.resource('s3')
+                      s3_list = []
+                      s3_list.append(event['ResourceProperties']['Cloud9OutputBucket'])
+                      for s3_bucket in s3_list:
+                          logger.info(f'S3 bucket {s3_bucket}')
+                          logger.info('Deleting S3 bucket contents.')
+                          bucket = s3.Bucket(s3_bucket)
+                          delete_objects(bucket)
+                          logger.info(f'Deleted all S3 bucket contents for {s3_bucket}.')
+                  except Exception as e:
+                      print(traceback.format_exc())
+                      responseData = {'Error': traceback.format_exc(e)}        
+                  try:
+                      ecr_repo_list = ['blue','red','main']
+                      ecr = boto3.client('ecr')
+                      logger.info('Deleting ECR iamges.')
+                      for ecr_repo in ecr_repo_list:
+                          get_images = ecr.list_images(repositoryName=ecr_repo)
+                          image_list = [image for image in get_images['imageIds']]
+                          if len(image_list)>=1:
+                              delete_images = ecr.batch_delete_image(repositoryName=ecr_repo, imageIds=image_list)
+                              logger.info('ECR iamges deleted.')
+                          logger.info('Deleting ECR repo.')
+                      repos=ecr.describe_repositories()
+                      for repo in repos['repositories']:
+                          if repo['repositoryName']==ecr_repo:
+                              ecr.delete_repository(repositoryName=ecr_repo)
+                              logger.info('ECR repo deleted.')  
+                  except Exception as e:
+                      print(traceback.format_exc())
+                      responseData = {'Error': traceback.format_exc(e)}     
+          
+              if event['RequestType'] == 'Create':
+                  try:
+                      # Open AWS clients
+                      logger.info('Creating EC2 client')
+                      ec2 = boto3.client('ec2')
+                      logger.info('EC2 client created: {}'.format(ec2))
+                      
+                      # Get the InstanceId of the Cloud9 IDE
+                      logger.info('Getting InstanceId for Cloud9 IDE')
+                      response = ec2.describe_instances(
+                        Filters=[
+                                  {
+                                    'Name': 'tag:filter',
+                                    'Values': ['cloud9-instance']
+                                  },
+                                  { 
+                                    'Name': 'instance-state-name',
+                                    'Values': ['running']
+                                  }
+                                ] 
+                      )
+
+                      InstanceId =response['Reservations'][0]['Instances'][0]['InstanceId']
+                      logger.info('Instance ID: {}'.format(InstanceId))
+                      InstanceIdList = []
+                      InstanceIdList.append(InstanceId)
+
+                      # Create the IamInstanceProfile request object
+                      iam_instance_profile = {
+                          'Arn': event['ResourceProperties']['Cloud9InstanceProfileArn'],
+                          'Name': event['ResourceProperties']['Cloud9InstanceProfileName']
+                      }
+                      logger.info('IAM Instance Profile Dict: {}'.format(iam_instance_profile))
+          
+                      # Wait for Instance to become ready before adding Role
+                      instance_runner_waiter = ec2.get_waiter('instance_running')
+                      instance_runner_waiter.wait(InstanceIds=InstanceIdList)
+
+                      # attach instance profile
+                      response = ec2.associate_iam_instance_profile(IamInstanceProfile=iam_instance_profile, InstanceId=InstanceId)
+                      
+                      responseData = {'Success': 'Started bootstrapping for instance:' +  InstanceId}
+                      cfnresponse.send(event, context, status, responseData, 'CustomResourcePhysicalID')
+                      
+                  except Exception as e:
+                      status = cfnresponse.FAILED
+                      print(traceback.format_exc())
+                      responseData = {'Error': traceback.format_exc(e)}
+                  finally:
+                      cfnresponse.send(event, context, status, responseData, 'CustomResourcePhysicalID')
+          
+          def delete_objects(bucket):
+
+              keys = []
+              for version in bucket.object_versions.all():
+                  if version.object_key not in keys:
+                      keys.append(version.object_key)
+              for key in keys:
+                  bucket.object_versions.filter(Prefix=key).delete()
+
+
+  Cloud9LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName:
+          Fn::Join:
+          - ''
+          - - Cloud9LambdaPolicy-
+            - Ref: AWS::Region
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+            - cloudformation:DescribeStacks
+            - cloudformation:DescribeStackEvents
+            - cloudformation:DescribeStackResource
+            - cloudformation:DescribeStackResources
+            - ec2:DescribeInstances
+            - ec2:AssociateIamInstanceProfile
+            - ec2:ModifyInstanceAttribute
+            - ec2:ReplaceIamInstanceProfileAssociation
+            - s3:GetObject
+            - s3:DeleteObject
+            - s3:ListObjects
+            - iam:ListInstanceProfiles
+            - iam:PassRole
+            Resource: "*"

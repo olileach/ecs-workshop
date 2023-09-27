@@ -48,5 +48,8 @@ echo -e "\nSetup complete."
 echo -e "\nPlease follow the ecs workshop instructions to complete the workshop."
 echo -e "\nHere is a list of ECR repoisitories created during setup. We will use these later.\n"
 aws ecr describe-repositories --query "repositories[*].repositoryUri" --output table
-echo
+echo " "
+echo " "
+echo "Use this command to list your ECR repositories"
+echo " "
 echo aws ecr describe-repositories --query "repositories[*].repositoryUri" --output table
